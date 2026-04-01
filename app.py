@@ -5,24 +5,29 @@ import folium
 from streamlit_folium import st_folium
 
 # -------------------------------
-# CONFIG
+# 🔐 MOT DE PASSE
 # -------------------------------
 st.set_page_config(page_title="Cadastre", layout="wide")
+
+password = st.text_input("🔒 Mot de passe", type="password")
+
+if password != "mafemmeestgeniale":
+    st.warning("Accès refusé")
+    st.stop()
 
 st.title("🗺️ Cadastre Saint-Igny-de-Vers")
 
 # -------------------------------
-# CHARGEMENT DATA
+# 📊 CHARGEMENT DATA
 # -------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_excel("data.xlsx")
-    return df
+    return pd.read_excel("data.xlsx")
 
 df = load_data()
 
 # -------------------------------
-# FONCTION POUR TROUVER COLONNES
+# 🔍 TROUVER COLONNES
 # -------------------------------
 def find_col(names):
     for col in df.columns:
@@ -40,7 +45,7 @@ col_adresse = find_col(["adresse", "rue", "voie"])
 col_commune = find_col(["commune", "ville"])
 
 # -------------------------------
-# FILTRES
+# 🔎 FILTRES
 # -------------------------------
 st.markdown("### 🔎 Recherche")
 
@@ -53,7 +58,7 @@ if col_section:
 section_filter = st.selectbox("🧭 Filtrer par section", sections)
 
 # -------------------------------
-# FILTRAGE DATA
+# 📂 FILTRAGE
 # -------------------------------
 res = df.copy()
 
@@ -71,14 +76,20 @@ if section_filter != "Toutes" and col_section:
 st.markdown(f"📊 **{len(res)} résultat(s)**")
 
 # -------------------------------
-# AFFICHAGE RESULTATS
+# 📄 RESULTATS
 # -------------------------------
+selected_section = None
+selected_numero = None
+
 for _, row in res.iterrows():
     prenom = row.get(col_prenom, "")
     nom = row.get(col_nom, "")
     surface = row.get(col_surface, "")
     adresse = row.get(col_adresse, "")
     commune = row.get(col_commune, "")
+
+    selected_section = str(row.get(col_section, ""))
+    selected_numero = str(row.get(col_numero, ""))
 
     st.markdown(f"""
     ---
@@ -89,10 +100,8 @@ for _, row in res.iterrows():
     """)
 
 # -------------------------------
-# CARTE CADASTRALE
+# 🗺️ CHARGEMENT GEOJSON
 # -------------------------------
-st.markdown("## 🗺️ Carte cadastrale")
-
 @st.cache_data
 def load_geo():
     with open("parcelles.json", encoding="utf-8") as f:
@@ -100,9 +109,29 @@ def load_geo():
 
 geo = load_geo()
 
-m = folium.Map(location=[46.2, 4.4], zoom_start=13)
+# -------------------------------
+# 🎯 TROUVER PARCELLE
+# -------------------------------
+selected_feature = None
 
-def style(feature):
+if selected_section and selected_numero:
+    for feature in geo["features"]:
+        if (
+            str(feature["properties"]["section"]) == selected_section
+            and str(feature["properties"]["numero"]) == selected_numero
+        ):
+            selected_feature = feature
+            break
+
+# -------------------------------
+# 🗺️ CARTE
+# -------------------------------
+st.markdown("## 🗺️ Carte cadastrale")
+
+m = folium.Map(tiles="OpenStreetMap")
+
+# style normal
+def style_default(feature):
     return {
         "fillColor": "#3388ff",
         "color": "black",
@@ -110,70 +139,34 @@ def style(feature):
         "fillOpacity": 0.2,
     }
 
-tooltip = folium.GeoJsonTooltip(
-    fields=["section", "numero"],
-    aliases=["Section :", "Parcelle :"]
-)
-
+# toutes les parcelles
 folium.GeoJson(
     geo,
-    style_function=style,
-    tooltip=tooltip
+    style_function=style_default
 ).add_to(m)
 
-map_data = st_folium(m, width=900, height=500)
+# -------------------------------
+# 🔥 ZOOM + SURBRILLANCE
+# -------------------------------
+if selected_feature:
+    coords = selected_feature["geometry"]["coordinates"][0]
+
+    lat_lon = [[p[1], p[0]] for p in coords]
+
+    folium.Polygon(
+        locations=lat_lon,
+        color="red",
+        fill=True,
+        fill_opacity=0.6
+    ).add_to(m)
+
+    m.fit_bounds(lat_lon)
+
+else:
+    m.location = [46.2, 4.4]
+    m.zoom_start = 13
 
 # -------------------------------
-# CLIC SUR PARCELLE
+# 📍 AFFICHAGE
 # -------------------------------
-if map_data and map_data.get("last_clicked"):
-
-    lat = map_data["last_clicked"]["lat"]
-    lon = map_data["last_clicked"]["lng"]
-
-    for feature in geo["features"]:
-        try:
-            coords = feature["geometry"]["coordinates"][0]
-
-            lats = [p[1] for p in coords]
-            lons = [p[0] for p in coords]
-
-            if min(lats) <= lat <= max(lats) and min(lons) <= lon <= max(lons):
-
-                section = str(feature["properties"]["section"])
-                numero = str(feature["properties"]["numero"])
-
-                st.markdown("### 📍 Parcelle sélectionnée")
-                st.write(f"Section : {section}")
-                st.write(f"Numéro : {numero}")
-
-                match = df[
-                    (df[col_section].astype(str) == section) &
-                    (df[col_numero].astype(str) == numero)
-                ]
-
-                if not match.empty:
-                    row = match.iloc[0]
-
-                    prenom = row.get(col_prenom, "")
-                    nom = row.get(col_nom, "")
-                    surface = row.get(col_surface, "")
-                    adresse = row.get(col_adresse, "")
-                    commune = row.get(col_commune, "")
-
-                    st.success("Informations trouvées")
-
-                    st.markdown(f"""
-                    👤 **Propriétaire : {prenom} {nom}**  
-                    📐 Surface : {surface}  
-                    📍 Adresse : {adresse}  
-                    🏙️ Commune : {commune}
-                    """)
-
-                else:
-                    st.warning("Aucune donnée trouvée dans Excel")
-
-                break
-
-        except:
-            pass
+st_folium(m, width=900, height=500)

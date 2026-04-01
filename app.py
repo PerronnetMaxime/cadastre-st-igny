@@ -8,11 +8,25 @@ st.title("🔎 Cadastre St Igny de Vers")
 df = pd.read_excel("data.xlsx")
 df = df.fillna("")
 
+# 🔍 Détection automatique des colonnes
+def find_col(possibles):
+    for col in df.columns:
+        for p in possibles:
+            if p.lower() in col.lower():
+                return col
+    return None
+
+col_nom = find_col(["nom", "proprietaire"])
+col_surface = find_col(["contenance", "surface"])
+col_commune = find_col(["commune"])
+col_adresse = find_col(["adresse", "voie", "rue"])
+
 # Recherche
 recherche = st.text_input("🔍 Rechercher")
 
 # Filtre section
-sections = sorted(df["section"].unique())
+col_section = find_col(["section"])
+sections = sorted(df[col_section].unique()) if col_section else []
 section_filtre = st.selectbox("🧭 Filtrer par section", ["Toutes"] + list(sections))
 
 # Filtrage
@@ -23,28 +37,17 @@ if recherche:
         res.astype(str).apply(lambda row: row.str.contains(recherche, case=False).any(), axis=1)
     ]
 
-if section_filtre != "Toutes":
-    res = res[res["section"] == section_filtre]
+if section_filtre != "Toutes" and col_section:
+    res = res[res[col_section] == section_filtre]
 
 st.write(f"📊 {len(res)} résultat(s)")
 
-# Détection adresse automatique
-def get_adresse(row):
-    if "adresse" in row:
-        return row["adresse"]
-    elif "voie" in row:
-        return row["voie"]
-    elif "num_voie" in row:
-        return str(row.get("num_voie", "")) + " " + str(row.get("voie", ""))
-    else:
-        return "Non renseignée"
-
-# Affichage
+# Affichage propre
 for _, row in res.iterrows():
     st.markdown(f"""
     ---
-    👤 **Nom : {row.get('nom', 'N/A')}**  
-    📐 Surface : {row.get('contenance', '')}  
-    📍 Adresse : {get_adresse(row)}  
-    🏙️ Commune : {row.get('commune_tx', '')}
+    👤 **Nom : {row.get(col_nom, 'N/A')}**  
+    📐 Surface : {row.get(col_surface, '')}  
+    📍 Adresse : {row.get(col_adresse, 'Non renseignée')}  
+    🏙️ Commune : {row.get(col_commune, '')}
     """)

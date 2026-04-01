@@ -19,7 +19,7 @@ def find_col(possibles):
 col_nom = find_col(["nom", "proprietaire"])
 col_prenom = find_col(["prenom"])
 col_surface = find_col(["contenance", "surface"])
-col_ville = find_col(["ville"])
+col_commune = find_col(["ville"])
 col_adresse = find_col(["adresse", "voie", "rue"])
 
 # Recherche
@@ -47,8 +47,8 @@ st.write(f"📊 {len(res)} résultat(s)")
 for _, row in res.iterrows():
     st.markdown(f"""
     ---
-    👤 **Nom : {row.get(col_nom, 'N/A')}**  
+    👤 **Nom : {row.get(col_nom, col_prenom,'N/A')}**  
     📐 Surface : {row.get(col_surface, '')}  
     📍 Adresse : {row.get(col_adresse, 'Non renseignée')}  
-    🏙️ Commune : {row.get(col_commune, '')}
+    🏙️ Commune : {row.get(col_ville, '')}
     """)

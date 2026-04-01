@@ -47,7 +47,7 @@ st.write(f"📊 {len(res)} résultat(s)")
 for _, row in res.iterrows():
     st.markdown(f"""
     ---
-    👤 **Nom : {row.get(col_nom, col_prenom,'N/A')}**  
+    👤 **Nom : {row.get(col_nom,'N/A')}**  
     📐 Surface : {row.get(col_surface, '')}  
     📍 Adresse : {row.get(col_adresse, 'Non renseignée')}  
     🏙️ Commune : {row.get(col_ville, '')}

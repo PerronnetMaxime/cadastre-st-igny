@@ -1,54 +1,114 @@
+
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Cadastre St Igny de Vers", layout="centered")
+# ⚙️ CONFIG
+st.set_page_config(
+    page_title="Cadastre St Igny",
+    page_icon="🏡",
+    layout="centered"
+)
 
-st.title("🔎 Cadastre St Igny de Vers")
+# 🔐 MOT DE PASSE
+PASSWORD = "1234"  # 👉 change ici
 
-df = pd.read_excel("data.xlsx")
-df = df.fillna("")
+if "auth" not in st.session_state:
+    st.session_state.auth = False
 
-# 🔍 Détection automatique des colonnes
-def find_col(possibles):
+if not st.session_state.auth:
+    st.title("🔐 Accès sécurisé")
+
+    pwd = st.text_input("Mot de passe", type="password")
+
+    if st.button("Se connecter"):
+        if pwd == PASSWORD:
+            st.session_state.auth = True
+            st.rerun()
+        else:
+            st.error("Mot de passe incorrect")
+
+    st.stop()
+
+# 🎨 STYLE CSS (design moderne)
+st.markdown("""
+<style>
+.card {
+    padding: 15px;
+    border-radius: 15px;
+    background-color: #f9f9f9;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.title {
+    font-size: 22px;
+    font-weight: bold;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🏡 Cadastre St Igny de Vers")
+
+# 📂 DATA
+@st.cache_data
+def load_data():
+    return pd.read_excel("data.xlsx")
+
+df = load_data()
+
+# 🔎 AUTO DETECTION COLONNES
+def trouver_col(noms):
     for col in df.columns:
-        for p in possibles:
-            if p.lower() in col.lower():
+        for n in noms:
+            if n.lower() in col.lower():
                 return col
     return None
 
-col_nom = find_col(["nom", "proprietaire"])
-col_prenom = find_col(["prenom", "prénom"])
-col_surface = find_col(["contenance", "surface"])
-col_commune = find_col(["commune", "ville"])
-col_adresse = find_col(["adresse", "voie", "rue"])
+col_prenom = trouver_col(["prenom", "prénom"])
+col_nom = trouver_col(["nom", "proprietaire"])
+col_commune = trouver_col(["commune", "ville"])
+col_surface = trouver_col(["surface", "contenance"])
+col_adresse = trouver_col(["adresse", "rue", "voie"])
+col_section = trouver_col(["section"])
+col_numero = trouver_col(["numero", "parcelle"])
 
-# Recherche
-recherche = st.text_input("🔍 Rechercher")
+# 🔍 RECHERCHE
+recherche = st.text_input("🔎 Rechercher")
 
-# Filtre section
-col_section = find_col(["section"])
-sections = sorted(df[col_section].unique()) if col_section else []
-section_filtre = st.selectbox("🧭 Filtrer par section", ["Toutes"] + list(sections))
+# 🎯 FILTRE
+if col_section:
+    sections = sorted(df[col_section].dropna().unique())
+    section = st.selectbox("📌 Section", ["Toutes"] + list(sections))
+else:
+    section = "Toutes"
 
-# Filtrage
+# 🧠 FILTRAGE
 res = df.copy()
 
 if recherche:
     res = res[
-        res.astype(str).apply(lambda row: row.str.contains(recherche, case=False).any(), axis=1)
+        res.astype(str).apply(
+            lambda r: r.str.contains(recherche, case=False, na=False)
+        ).any(axis=1)
     ]
 
-if section_filtre != "Toutes" and col_section:
-    res = res[res[col_section] == section_filtre]
+if section != "Toutes" and col_section:
+    res = res[res[col_section] == section]
 
 st.write(f"📊 {len(res)} résultat(s)")
 
-# Affichage propre
+# 🧾 AFFICHAGE DESIGN CARTE
 for _, row in res.iterrows():
+    prenom = row.get(col_prenom, "") if col_prenom else ""
+    nom = row.get(col_nom, "N/A") if col_nom else ""
+    commune = row.get(col_commune, "")
+    surface = row.get(col_surface, "")
+    adresse = row.get(col_adresse, "Non renseignée")
+    numero = row.get(col_numero, "")
+
     st.markdown(f"""
-    ---
-    👤 **Nom : {row.get(col_nom,'N/A')}**  
-    📐 Surface : {row.get(col_surface, '')}  
-    📍 Adresse : {row.get(col_adresse, 'Non renseignée')}  
-    🏙️ Commune : {row.get(col_ville, '')}
-    """)
+    <div class="card">
+        <div class="title">🏠 Parcelle {numero}</div>
+        👤 <b>{prenom} {nom}</b><br>
+        📐 Surface : {surface}<br>
+        📍 {adresse}<br>
+        🏙️ {

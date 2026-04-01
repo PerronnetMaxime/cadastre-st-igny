@@ -1,17 +1,43 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Cadastre St Igny de Vers", layout="wide")
+st.set_page_config(page_title="Cadastre St Igny de Vers", layout="centered")
 
 st.title("🔎 Cadastre St Igny de Vers")
 
 df = pd.read_excel("data.xlsx")
 
-recherche = st.text_input("Recherche (nom, parcelle, commune...)")
+# Nettoyage
+df = df.fillna("")
+
+# 🔍 Recherche texte
+recherche = st.text_input("🔍 Rechercher (nom, parcelle...)")
+
+# 🎯 Filtre section
+sections = sorted(df["section"].unique())
+section_filtre = st.selectbox("🧭 Filtrer par section", ["Toutes"] + list(sections))
+
+# Filtrage
+res = df.copy()
 
 if recherche:
-    res = df[
-        df.astype(str).apply(lambda row: row.str.contains(recherche, case=False).any(), axis=1)
+    res = res[
+        res.astype(str).apply(lambda row: row.str.contains(recherche, case=False).any(), axis=1)
     ]
-    st.write(f"Résultats : {len(res)}")
-    st.dataframe(res)
+
+if section_filtre != "Toutes":
+    res = res[res["section"] == section_filtre]
+
+# Résultats
+st.write(f"📊 {len(res)} résultat(s)")
+
+# Affichage mobile
+for _, row in res.iterrows():
+    st.markdown(f"""
+    ---
+    🏠 **Parcelle : {row.get('numero', '')}**  
+    📍 Commune : {row.get('commune_tx', '')}  
+    🧭 Section : {row.get('section', '')}  
+    👤 Propriétaire : {row.get('nom', 'N/A')}  
+    📐 Surface : {row.get('contenance', '')}
+    """)

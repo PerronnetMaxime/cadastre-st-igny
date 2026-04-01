@@ -5,16 +5,21 @@ import folium
 from streamlit_folium import st_folium
 
 # -------------------------------
-# CONFIG + MOT DE PASSE
+# CONFIG
 # -------------------------------
 st.set_page_config(page_title="Cadastre", layout="wide")
 
+# -------------------------------
+# 🔐 MOT DE PASSE
+# -------------------------------
 password = st.text_input("🔐 Mot de passe", type="password")
 
 if password != "mafemmeestgeniale":
-    st.warning("Accès sécurisé")
     st.stop()
 
+# -------------------------------
+# TITRE
+# -------------------------------
 st.title("🗺️ Cadastre Saint-Igny-de-Vers")
 
 # -------------------------------
@@ -33,7 +38,7 @@ df = load_data()
 geo = load_geo()
 
 # -------------------------------
-# DETECTION COLONNES
+# TROUVER COLONNES
 # -------------------------------
 def find_col(names):
     for col in df.columns:
@@ -43,7 +48,7 @@ def find_col(names):
     return None
 
 col_section = find_col(["section"])
-col_numero = find_col(["numero", "num"])
+col_numero = find_col(["numero"])
 col_nom = find_col(["nom"])
 col_prenom = find_col(["prenom"])
 col_surface = find_col(["surface"])
@@ -51,66 +56,94 @@ col_adresse = find_col(["adresse"])
 col_commune = find_col(["commune"])
 
 # -------------------------------
-# 🗺️ CARTE GLOBALE (TOUTES PARCELLES)
+# 🗺️ CARTE
 # -------------------------------
 st.markdown("## 🗺️ Plan cadastral")
 
-m = folium.Map(location=[46.2, 4.4], zoom_start=13)
+m = folium.Map(location=[46.22, 4.42], zoom_start=14, tiles="CartoDB positron")
 
-# Affichage avec numéros comme Géoportail
-for feature in geo["features"]:
-    try:
-        coords = feature["geometry"]["coordinates"][0]
-        section = feature["properties"]["section"]
-        numero = feature["properties"]["numero"]
+# Parcelles (léger)
+def style_all(feature):
+    return {
+        "fillOpacity": 0,
+        "color": "#666",
+        "weight": 0.5
+    }
 
-        # centre parcelle
-        lat = sum([p[1] for p in coords]) / len(coords)
-        lon = sum([p[0] for p in coords]) / len(coords)
+tooltip = folium.GeoJsonTooltip(
+    fields=["section", "numero"],
+    aliases=["Section", "N°"]
+)
 
-        # contour
-        folium.Polygon(
-            locations=[(p[1], p[0]) for p in coords],
-            color="black",
-            weight=1,
-            fill=False
-        ).add_to(m)
-
-        # numéro au centre
-        folium.Marker(
-            location=[lat, lon],
-            icon=folium.DivIcon(html=f"""
-                <div style="font-size:8px;color:black;">
-                    {numero}
-                </div>
-            """)
-        ).add_to(m)
-
-    except:
-        pass
-
-st_folium(m, width=900, height=500)
+folium.GeoJson(
+    geo,
+    style_function=style_all,
+    tooltip=tooltip
+).add_to(m)
 
 # -------------------------------
 # 🔎 RECHERCHE
 # -------------------------------
 st.markdown("## 🔎 Recherche parcelle")
 
-section_input = st.text_input("Section (ex: AB)")
-numero_input = st.text_input("Numéro (ex: 283)")
+col1, col2 = st.columns(2)
+section_input = col1.text_input("Section")
+numero_input = col2.text_input("Numéro")
 
-# -------------------------------
-# RESULTAT + CARTE ZOOM
-# -------------------------------
+selected_feature = None
+
 if section_input and numero_input:
+    for feature in geo["features"]:
+        sec = str(feature["properties"]["section"])
+        num = str(feature["properties"]["numero"])
 
-    section_input = section_input.upper()
+        if sec == section_input and num == numero_input:
+            selected_feature = feature
+            break
 
-    st.markdown("## 📍 Résultat")
+# -------------------------------
+# 🎯 SURBRILLANCE
+# -------------------------------
+if selected_feature:
+
+    def style_selected(feature):
+        return {
+            "fillColor": "red",
+            "color": "red",
+            "weight": 3,
+            "fillOpacity": 0.5
+        }
+
+    folium.GeoJson(
+        selected_feature,
+        style_function=style_selected
+    ).add_to(m)
+
+    coords = selected_feature["geometry"]["coordinates"][0]
+    lats = [p[1] for p in coords]
+    lons = [p[0] for p in coords]
+
+    m.location = [sum(lats)/len(lats), sum(lons)/len(lons)]
+    m.zoom_start = 18
+
+# -------------------------------
+# AFFICHAGE
+# -------------------------------
+st_folium(m, width=1000, height=600)
+
+# -------------------------------
+# INFOS
+# -------------------------------
+if selected_feature:
+
+    st.markdown("## 📍 Informations parcelle")
+
+    section = selected_feature["properties"]["section"]
+    numero = selected_feature["properties"]["numero"]
 
     match = df[
-        (df[col_section].astype(str) == section_input) &
-        (df[col_numero].astype(str) == numero_input)
+        (df[col_section].astype(str) == str(section)) &
+        (df[col_numero].astype(str) == str(numero))
     ]
 
     if not match.empty:
@@ -119,58 +152,10 @@ if section_input and numero_input:
         st.success("Parcelle trouvée")
 
         st.markdown(f"""
-        👤 **Propriétaire : {row.get(col_prenom, '')} {row.get(col_nom, '')}**  
-        📐 Surface : {row.get(col_surface, '')}  
-        📍 Adresse : {row.get(col_adresse, '')}  
-        🏙️ Commune : {row.get(col_commune, '')}
+        👤 **Propriétaire : {row.get(col_prenom, "")} {row.get(col_nom, "")}**  
+        📐 Surface : {row.get(col_surface, "")}  
+        📍 Adresse : {row.get(col_adresse, "")}  
+        🏙️ Commune : {row.get(col_commune, "")}
         """)
-
     else:
         st.warning("Aucune donnée trouvée")
-
-    # -------------------------------
-    # CARTE ZOOM + SURBRILLANCE
-    # -------------------------------
-    m2 = folium.Map(location=[46.2, 4.4], zoom_start=17)
-
-    def style_function(feature):
-        section = str(feature["properties"]["section"])
-        numero = str(feature["properties"]["numero"])
-
-        if section == section_input and numero == numero_input:
-            return {
-                "fillColor": "red",
-                "color": "red",
-                "weight": 3,
-                "fillOpacity": 0.6,
-            }
-        else:
-            return {
-                "fillColor": "#3388ff",
-                "color": "black",
-                "weight": 1,
-                "fillOpacity": 0.05,
-            }
-
-    # centrage sur parcelle
-    center = [46.2, 4.4]
-
-    for feature in geo["features"]:
-        if (str(feature["properties"]["section"]) == section_input and
-            str(feature["properties"]["numero"]) == numero_input):
-
-            coords = feature["geometry"]["coordinates"][0]
-            lats = [p[1] for p in coords]
-            lons = [p[0] for p in coords]
-
-            center = [sum(lats)/len(lats), sum(lons)/len(lons)]
-            break
-
-    m2 = folium.Map(location=center, zoom_start=18)
-
-    folium.GeoJson(
-        geo,
-        style_function=style_function
-    ).add_to(m2)
-
-    st_folium(m2, width=900, height=500)

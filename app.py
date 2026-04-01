@@ -7,7 +7,7 @@ from streamlit_folium import st_folium
 # -------------------------------
 # CONFIG
 # -------------------------------
-st.set_page_config(page_title="Cadastre", layout="wide")
+st.set_page_config(page_title="Cadastre PRO", layout="wide")
 
 # -------------------------------
 # 🔐 MOT DE PASSE
@@ -17,17 +17,16 @@ password = st.text_input("🔐 Mot de passe", type="password")
 if password != "mafemmeestgeniale":
     st.stop()
 
-# -------------------------------
-# TITRE
-# -------------------------------
-st.title("🗺️ Cadastre Saint-Igny-de-Vers")
+st.title("🗺️ Cadastre PRO - Saint-Igny-de-Vers")
 
 # -------------------------------
-# CHARGEMENT DATA
+# LOAD DATA
 # -------------------------------
 @st.cache_data
 def load_data():
-    return pd.read_excel("data.xlsx")
+    df = pd.read_excel("data.xlsx")
+    df.columns = df.columns.str.lower()
+    return df
 
 @st.cache_data
 def load_geo():
@@ -38,124 +37,143 @@ df = load_data()
 geo = load_geo()
 
 # -------------------------------
-# TROUVER COLONNES
+# COLONNES
 # -------------------------------
-def find_col(names):
-    for col in df.columns:
-        for name in names:
-            if name.lower() in col.lower():
-                return col
-    return None
+def col(name):
+    return [c for c in df.columns if name in c][0]
 
-col_section = find_col(["section"])
-col_numero = find_col(["numero"])
-col_nom = find_col(["nom"])
-col_prenom = find_col(["prenom"])
-col_surface = find_col(["surface"])
-col_adresse = find_col(["adresse"])
-col_commune = find_col(["commune"])
+col_section = col("section")
+col_numero = col("numero")
+col_nom = col("nom")
+col_prenom = col("prenom")
+col_surface = col("surface")
+col_adresse = col("adresse")
+col_commune = col("commune")
 
 # -------------------------------
-# 🗺️ CARTE
+# 🔎 RECHERCHE INTELLIGENTE
 # -------------------------------
-st.markdown("## 🗺️ Plan cadastral")
+st.markdown("## 🔎 Recherche rapide")
 
-m = folium.Map(location=[46.22, 4.42], zoom_start=14, tiles="CartoDB positron")
+search = st.text_input("Tape numéro ou nom (ex: 283 ou Dupont)")
 
-# Parcelles (léger)
-def style_all(feature):
-    return {
-        "fillOpacity": 0,
-        "color": "#666",
-        "weight": 0.5
-    }
+section_input = ""
+numero_input = ""
 
-tooltip = folium.GeoJsonTooltip(
-    fields=["section", "numero"],
-    aliases=["Section", "N°"]
-)
+if search:
+    res = df[df.astype(str).apply(lambda row: row.str.contains(search, case=False).any(), axis=1)]
 
-folium.GeoJson(
-    geo,
-    style_function=style_all,
-    tooltip=tooltip
-).add_to(m)
+    if not res.empty:
+        row = res.iloc[0]
+        section_input = str(row[col_section]).strip().upper()
+        numero_input = str(row[col_numero]).strip()
 
 # -------------------------------
-# 🔎 RECHERCHE
+# CARTE
 # -------------------------------
-st.markdown("## 🔎 Recherche parcelle")
+st.markdown("## 🗺️ Carte")
 
-col1, col2 = st.columns(2)
-section_input = col1.text_input("Section")
-numero_input = col2.text_input("Numéro")
-
+center = [46.22, 4.42]
+zoom = 14
 selected_feature = None
 
+# chercher dans geojson
 if section_input and numero_input:
-    for feature in geo["features"]:
-        sec = str(feature["properties"]["section"])
-        num = str(feature["properties"]["numero"])
+    for f in geo["features"]:
+        sec = str(f["properties"]["section"]).strip().upper()
+        num = str(f["properties"]["numero"]).strip()
 
         if sec == section_input and num == numero_input:
-            selected_feature = feature
+            selected_feature = f
             break
 
-# -------------------------------
-# 🎯 SURBRILLANCE
-# -------------------------------
+# recalcul centre
 if selected_feature:
+    coords = selected_feature["geometry"]["coordinates"][0]
+    lats = [p[1] for p in coords]
+    lons = [p[0] for p in coords]
 
-    def style_selected(feature):
-        return {
+    center = [sum(lats)/len(lats), sum(lons)/len(lons)]
+    zoom = 18
+
+# carte IGN
+m = folium.Map(location=center, zoom_start=zoom, tiles=None)
+
+folium.TileLayer(
+    tiles="https://wxs.ign.fr/essentiels/geoportail/wmts?"
+          "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
+          "&LAYER=ORTHOIMAGERY.ORTHOPHOTOS"
+          "&STYLE=normal&TILEMATRIXSET=PM"
+          "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
+          "&FORMAT=image/jpeg",
+    attr="IGN"
+).add_to(m)
+
+# parcelles
+def style(feature):
+    return {
+        "fillOpacity": 0,
+        "color": "#444",
+        "weight": 1
+    }
+
+folium.GeoJson(geo, style_function=style).add_to(m)
+
+# surlignage
+if selected_feature:
+    folium.GeoJson(
+        selected_feature,
+        style_function=lambda x: {
             "fillColor": "red",
             "color": "red",
             "weight": 3,
             "fillOpacity": 0.5
         }
-
-    folium.GeoJson(
-        selected_feature,
-        style_function=style_selected
     ).add_to(m)
 
-    coords = selected_feature["geometry"]["coordinates"][0]
-    lats = [p[1] for p in coords]
-    lons = [p[0] for p in coords]
-
-    m.location = [sum(lats)/len(lats), sum(lons)/len(lons)]
-    m.zoom_start = 18
+# affichage carte + clic
+map_data = st_folium(m, width=1000, height=600)
 
 # -------------------------------
-# AFFICHAGE
+# 👆 CLIC SUR CARTE
 # -------------------------------
-st_folium(m, width=1000, height=600)
+if map_data and map_data.get("last_clicked"):
+
+    lat = map_data["last_clicked"]["lat"]
+    lon = map_data["last_clicked"]["lng"]
+
+    for f in geo["features"]:
+        coords = f["geometry"]["coordinates"][0]
+        lats = [p[1] for p in coords]
+        lons = [p[0] for p in coords]
+
+        if min(lats) <= lat <= max(lats) and min(lons) <= lon <= max(lons):
+            section_input = str(f["properties"]["section"]).strip().upper()
+            numero_input = str(f["properties"]["numero"]).strip()
+            break
 
 # -------------------------------
 # INFOS
 # -------------------------------
-if selected_feature:
+if section_input and numero_input:
 
     st.markdown("## 📍 Informations parcelle")
 
-    section = selected_feature["properties"]["section"]
-    numero = selected_feature["properties"]["numero"]
-
     match = df[
-        (df[col_section].astype(str) == str(section)) &
-        (df[col_numero].astype(str) == str(numero))
+        (df[col_section].astype(str).str.strip().str.upper() == section_input) &
+        (df[col_numero].astype(str).str.strip() == numero_input)
     ]
 
     if not match.empty:
         row = match.iloc[0]
 
-        st.success("Parcelle trouvée")
+        st.success(f"Parcelle {section_input} {numero_input}")
 
         st.markdown(f"""
-        👤 **Propriétaire : {row.get(col_prenom, "")} {row.get(col_nom, "")}**  
-        📐 Surface : {row.get(col_surface, "")}  
-        📍 Adresse : {row.get(col_adresse, "")}  
-        🏙️ Commune : {row.get(col_commune, "")}
+        👤 **{row[col_prenom]} {row[col_nom]}**  
+        📐 Surface : {row[col_surface]}  
+        📍 Adresse : {row[col_adresse]}  
+        🏙️ Commune : {row[col_commune]}
         """)
     else:
-        st.warning("Aucune donnée trouvée")
+        st.warning("Parcelle non trouvée dans Excel")

@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 
@@ -29,7 +28,7 @@ if not st.session_state.auth:
 
     st.stop()
 
-# 🎨 STYLE CSS (design moderne)
+# 🎨 STYLE
 st.markdown("""
 <style>
 .card {
@@ -40,7 +39,7 @@ st.markdown("""
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 .title {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: bold;
 }
 </style>
@@ -48,14 +47,14 @@ st.markdown("""
 
 st.title("🏡 Cadastre St Igny de Vers")
 
-# 📂 DATA
+# 📂 CHARGEMENT DATA
 @st.cache_data
 def load_data():
     return pd.read_excel("data.xlsx")
 
 df = load_data()
 
-# 🔎 AUTO DETECTION COLONNES
+# 🔎 DETECTION COLONNES
 def trouver_col(noms):
     for col in df.columns:
         for n in noms:
@@ -72,12 +71,12 @@ col_section = trouver_col(["section"])
 col_numero = trouver_col(["numero", "parcelle"])
 
 # 🔍 RECHERCHE
-recherche = st.text_input("🔎 Rechercher")
+recherche = st.text_input("🔎 Rechercher (nom, parcelle...)")
 
-# 🎯 FILTRE
+# 🎯 FILTRE SECTION
 if col_section:
     sections = sorted(df[col_section].dropna().unique())
-    section = st.selectbox("📌 Section", ["Toutes"] + list(sections))
+    section = st.selectbox("📌 Filtrer par section", ["Toutes"] + list(sections))
 else:
     section = "Toutes"
 
@@ -94,21 +93,24 @@ if recherche:
 if section != "Toutes" and col_section:
     res = res[res[col_section] == section]
 
+# 📊 RESULTATS
 st.write(f"📊 {len(res)} résultat(s)")
 
-# 🧾 AFFICHAGE DESIGN CARTE
+# 🧾 AFFICHAGE
 for _, row in res.iterrows():
     prenom = row.get(col_prenom, "") if col_prenom else ""
     nom = row.get(col_nom, "N/A") if col_nom else ""
-    commune = row.get(col_commune, "")
+    commune = row.get(col_commune, "") if col_commune else ""
     surface = row.get(col_surface, "")
     adresse = row.get(col_adresse, "Non renseignée")
     numero = row.get(col_numero, "")
 
     st.markdown(f"""
-    <div class="card">
-        <div class="title">🏠 Parcelle {numero}</div>
-        👤 <b>{prenom} {nom}</b><br>
-        📐 Surface : {surface}<br>
-        📍 {adresse}<br>
-        🏙️ {
+<div class="card">
+    <div class="title">🏠 Parcelle {numero}</div>
+    👤 <b>{prenom} {nom}</b><br>
+    📐 Surface : {surface}<br>
+    📍 {adresse}<br>
+    🏙️ {commune}
+</div>
+""", unsafe_allow_html=True)

@@ -17,6 +17,7 @@ def find_col(possibles):
     return None
 
 col_nom = find_col(["nom", "proprietaire"])
+col_prenom = find_col(["prenom", "proprietaire"])
 col_surface = find_col(["contenance", "surface"])
 col_commune = find_col(["commune"])
 col_adresse = find_col(["adresse", "voie", "rue"])

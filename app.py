@@ -45,6 +45,8 @@ col_nom = col("nom")
 col_prenom = col("prenom")
 col_surface = col("surface")
 col_adresse = col("adresse")
+col_cp = col("postal") or col("cp")
+col_ville = col("ville")
 col_commune = col("commune")
 
 # -------------------------------
@@ -75,12 +77,21 @@ if section_input and numero_input:
     if not result.empty:
         row = result.iloc[0]
 
+        # Adresse complète
+        adresse = row.get(col_adresse, "")
+        cp = row.get(col_cp, "")
+        ville = row.get(col_ville, "")
+
+        adresse_complete = " ".join(
+            str(x) for x in [adresse, cp, ville] if pd.notna(x)
+        )
+
         st.success("Parcelle trouvée")
 
         st.markdown(f"""
         👤 **Propriétaire : {row.get(col_prenom, "")} {row.get(col_nom, "")}**  
         📐 Surface : {row.get(col_surface, "")}  
-        📍 Adresse : {row.get(col_adresse, "")}  
+        📍 Adresse : {adresse_complete}  
         🏙️ Commune : {row.get(col_commune, "")}
         """)
 

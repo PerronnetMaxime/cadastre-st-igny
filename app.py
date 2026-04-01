@@ -1,116 +1,179 @@
 import streamlit as st
 import pandas as pd
+import json
+import folium
+from streamlit_folium import st_folium
 
-# ⚙️ CONFIG
-st.set_page_config(
-    page_title="Cadastre St Igny",
-    page_icon="🏡",
-    layout="centered"
-)
+# -------------------------------
+# CONFIG
+# -------------------------------
+st.set_page_config(page_title="Cadastre", layout="wide")
 
-# 🔐 MOT DE PASSE
-PASSWORD = "1234"  # 👉 change ici
+st.title("🗺️ Cadastre Saint-Igny-de-Vers")
 
-if "auth" not in st.session_state:
-    st.session_state.auth = False
-
-if not st.session_state.auth:
-    st.title("🔐 Accès sécurisé")
-
-    pwd = st.text_input("Mot de passe", type="password")
-
-    if st.button("Se connecter"):
-        if pwd == PASSWORD:
-            st.session_state.auth = True
-            st.rerun()
-        else:
-            st.error("Mot de passe incorrect")
-
-    st.stop()
-
-# 🎨 STYLE
-st.markdown("""
-<style>
-.card {
-    padding: 15px;
-    border-radius: 15px;
-    background-color: #f9f9f9;
-    margin-bottom: 15px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-.title {
-    font-size: 20px;
-    font-weight: bold;
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.title("🏡 Cadastre St Igny de Vers")
-
-# 📂 CHARGEMENT DATA
+# -------------------------------
+# CHARGEMENT DATA
+# -------------------------------
 @st.cache_data
 def load_data():
-    return pd.read_excel("data.xlsx")
+    df = pd.read_excel("data.xlsx")
+    return df
 
 df = load_data()
 
-# 🔎 DETECTION COLONNES
-def trouver_col(noms):
+# -------------------------------
+# FONCTION POUR TROUVER COLONNES
+# -------------------------------
+def find_col(names):
     for col in df.columns:
-        for n in noms:
-            if n.lower() in col.lower():
+        for name in names:
+            if name.lower() in col.lower():
                 return col
     return None
 
-col_prenom = trouver_col(["prenom", "prénom"])
-col_nom = trouver_col(["nom", "proprietaire"])
-col_commune = trouver_col(["commune", "ville"])
-col_surface = trouver_col(["surface", "contenance"])
-col_adresse = trouver_col(["adresse", "rue", "voie"])
-col_section = trouver_col(["section"])
-col_numero = trouver_col(["numero", "parcelle"])
+col_nom = find_col(["nom"])
+col_prenom = find_col(["prenom"])
+col_section = find_col(["section"])
+col_numero = find_col(["numero", "num"])
+col_surface = find_col(["surface", "contenance"])
+col_adresse = find_col(["adresse", "rue", "voie"])
+col_commune = find_col(["commune", "ville"])
 
-# 🔍 RECHERCHE
-recherche = st.text_input("🔎 Rechercher (nom, parcelle...)")
+# -------------------------------
+# FILTRES
+# -------------------------------
+st.markdown("### 🔎 Recherche")
 
-# 🎯 FILTRE SECTION
+search = st.text_input("Rechercher (nom, parcelle...)")
+
+sections = ["Toutes"]
 if col_section:
-    sections = sorted(df[col_section].dropna().unique())
-    section = st.selectbox("📌 Filtrer par section", ["Toutes"] + list(sections))
-else:
-    section = "Toutes"
+    sections += sorted(df[col_section].dropna().astype(str).unique())
 
-# 🧠 FILTRAGE
+section_filter = st.selectbox("🧭 Filtrer par section", sections)
+
+# -------------------------------
+# FILTRAGE DATA
+# -------------------------------
 res = df.copy()
 
-if recherche:
+if search:
     res = res[
         res.astype(str).apply(
-            lambda r: r.str.contains(recherche, case=False, na=False)
-        ).any(axis=1)
+            lambda row: row.str.contains(search, case=False).any(),
+            axis=1
+        )
     ]
 
-if section != "Toutes" and col_section:
-    res = res[res[col_section] == section]
+if section_filter != "Toutes" and col_section:
+    res = res[res[col_section].astype(str) == section_filter]
 
-# 📊 RESULTATS
-st.write(f"📊 {len(res)} résultat(s)")
+st.markdown(f"📊 **{len(res)} résultat(s)**")
 
-# 🧾 AFFICHAGE
+# -------------------------------
+# AFFICHAGE RESULTATS
+# -------------------------------
 for _, row in res.iterrows():
-    prenom = row.get(col_prenom, "") if col_prenom else ""
-    nom = row.get(col_nom, "N/A") if col_nom else ""
-    commune = row.get(col_commune, "") if col_commune else ""
+    prenom = row.get(col_prenom, "")
+    nom = row.get(col_nom, "")
     surface = row.get(col_surface, "")
-    adresse = row.get(col_adresse, "Non renseignée")
-    numero = row.get(col_numero, "")
+    adresse = row.get(col_adresse, "")
+    commune = row.get(col_commune, "")
 
     st.markdown(f"""
-<div class="card">
-    <div class="title">🏠 Parcelle {numero}</div>
-    👤 <b>{prenom} {nom}</b><br>
-    📐 Surface : {surface}<br>
-    📍 {adresse}<br>
-    🏙️ {commune}
-</div>
-""", unsafe_allow_html=True)
+    ---
+    👤 **Propriétaire : {prenom} {nom}**  
+    📐 Surface : {surface}  
+    📍 Adresse : {adresse}  
+    🏙️ Commune : {commune}  
+    """)
+
+# -------------------------------
+# CARTE CADASTRALE
+# -------------------------------
+st.markdown("## 🗺️ Carte cadastrale")
+
+@st.cache_data
+def load_geo():
+    with open("parcelles.json", encoding="utf-8") as f:
+        return json.load(f)
+
+geo = load_geo()
+
+m = folium.Map(location=[46.2, 4.4], zoom_start=13)
+
+def style(feature):
+    return {
+        "fillColor": "#3388ff",
+        "color": "black",
+        "weight": 1,
+        "fillOpacity": 0.2,
+    }
+
+tooltip = folium.GeoJsonTooltip(
+    fields=["section", "numero"],
+    aliases=["Section :", "Parcelle :"]
+)
+
+folium.GeoJson(
+    geo,
+    style_function=style,
+    tooltip=tooltip
+).add_to(m)
+
+map_data = st_folium(m, width=900, height=500)
+
+# -------------------------------
+# CLIC SUR PARCELLE
+# -------------------------------
+if map_data and map_data.get("last_clicked"):
+
+    lat = map_data["last_clicked"]["lat"]
+    lon = map_data["last_clicked"]["lng"]
+
+    for feature in geo["features"]:
+        try:
+            coords = feature["geometry"]["coordinates"][0]
+
+            lats = [p[1] for p in coords]
+            lons = [p[0] for p in coords]
+
+            if min(lats) <= lat <= max(lats) and min(lons) <= lon <= max(lons):
+
+                section = str(feature["properties"]["section"])
+                numero = str(feature["properties"]["numero"])
+
+                st.markdown("### 📍 Parcelle sélectionnée")
+                st.write(f"Section : {section}")
+                st.write(f"Numéro : {numero}")
+
+                match = df[
+                    (df[col_section].astype(str) == section) &
+                    (df[col_numero].astype(str) == numero)
+                ]
+
+                if not match.empty:
+                    row = match.iloc[0]
+
+                    prenom = row.get(col_prenom, "")
+                    nom = row.get(col_nom, "")
+                    surface = row.get(col_surface, "")
+                    adresse = row.get(col_adresse, "")
+                    commune = row.get(col_commune, "")
+
+                    st.success("Informations trouvées")
+
+                    st.markdown(f"""
+                    👤 **Propriétaire : {prenom} {nom}**  
+                    📐 Surface : {surface}  
+                    📍 Adresse : {adresse}  
+                    🏙️ Commune : {commune}
+                    """)
+
+                else:
+                    st.warning("Aucune donnée trouvée dans Excel")
+
+                break
+
+        except:
+            pass

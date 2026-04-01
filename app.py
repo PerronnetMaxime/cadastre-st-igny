@@ -6,14 +6,12 @@ st.set_page_config(page_title="Cadastre St Igny de Vers", layout="centered")
 st.title("🔎 Cadastre St Igny de Vers")
 
 df = pd.read_excel("data.xlsx")
-
-# Nettoyage
 df = df.fillna("")
 
-# 🔍 Recherche texte
-recherche = st.text_input("🔍 Rechercher (nom, parcelle...)")
+# Recherche
+recherche = st.text_input("🔍 Rechercher")
 
-# 🎯 Filtre section
+# Filtre section
 sections = sorted(df["section"].unique())
 section_filtre = st.selectbox("🧭 Filtrer par section", ["Toutes"] + list(sections))
 
@@ -28,16 +26,25 @@ if recherche:
 if section_filtre != "Toutes":
     res = res[res["section"] == section_filtre]
 
-# Résultats
 st.write(f"📊 {len(res)} résultat(s)")
 
-# Affichage mobile
+# Détection adresse automatique
+def get_adresse(row):
+    if "adresse" in row:
+        return row["adresse"]
+    elif "voie" in row:
+        return row["voie"]
+    elif "num_voie" in row:
+        return str(row.get("num_voie", "")) + " " + str(row.get("voie", ""))
+    else:
+        return "Non renseignée"
+
+# Affichage
 for _, row in res.iterrows():
     st.markdown(f"""
     ---
-    🏠 **Parcelle : {row.get('numero', '')}**  
-    📍 Commune : {row.get('commune_tx', '')}  
-    🧭 Section : {row.get('section', '')}  
-    👤 Propriétaire : {row.get('nom', 'N/A')}  
-    📐 Surface : {row.get('contenance', '')}
+    👤 **Nom : {row.get('nom', 'N/A')}**  
+    📐 Surface : {row.get('contenance', '')}  
+    📍 Adresse : {get_adresse(row)}  
+    🏙️ Commune : {row.get('commune_tx', '')}
     """)
